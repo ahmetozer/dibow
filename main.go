@@ -9,8 +9,8 @@ import (
 	"os"
 	"flag"
 	"context"
-  "os/signal"
-  "time"
+	"os/signal"
+	"time"
 )
 
 var (
@@ -25,7 +25,7 @@ var (
 
 
 
-// as util
+// pass CMD output to HTTP
 
 
 func writeCmdOutput(res http.ResponseWriter, pipeReader *io.PipeReader) {
@@ -52,53 +52,60 @@ func writeCmdOutput(res http.ResponseWriter, pipeReader *io.PipeReader) {
 
 
 func main() {
-	a := []string{"sh", "df", "gzip", "lsblk"}
 
-	for i, s := range a {
+	// Requred programs for the backup system on Linux enviroment
+
+	required_programs := []string{"sh", "df", "gzip", "lsblk"}
+
+	for i, s := range required_programs {
+		// Get path of required programs
 		path, err := exec.LookPath(s)
 		if err == nil {
 			fmt.Printf("Required program %v %v found at %v\n", i+1, s, path	)
-			requiredapps[i] = true
+			requiredapps[i] = true	//save to array
 		} else {
 			fmt.Printf("Required program %v %v cannot found.\n", i+1, s)
 			requiredapps[i] = false
-			if i < 2 {
+			if i < 2 {							//sh and df is must required. If is not found in software than exit.
 				fmt.Printf("Please install %v and run this program again\n", s)
 				os.Exit(3)
 			}
 		}
 
 	}
+
+	//	Get Hostname of Server
 	var err error
 	hostname, err = os.Hostname()
 		if err != nil {
 			panic(err)
 		}
 
-		fmt.Println("hostname:", hostname)
+	fmt.Println("hostname:", hostname)
 
 	flag.StringVar(&listenAddr, "listen-addr", ":80", "server listen address")
-   flag.Parse()
+  flag.Parse()
 
-   logger := log.New(os.Stdout, "http: ", log.LstdFlags)
+  logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 
-   done := make(chan bool, 1)
-   quit := make(chan os.Signal, 1)
+  done := make(chan bool, 1)
+  quit := make(chan os.Signal, 1)
 
-   signal.Notify(quit, os.Interrupt)
+  signal.Notify(quit, os.Interrupt)
 
-   server := newWebserver(logger)
-   go gracefullShutdown(server, logger, quit, done)
+  server := newWebserver(logger)
+  go gracefullShutdown(server, logger, quit, done)
 
-   logger.Println("Server is ready to handle requests at", listenAddr)
-   if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-     logger.Fatalf("Could not listen on %s: %v\n", listenAddr, err)
-   }
+  logger.Println("Server is ready to handle requests at", listenAddr)
+  if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+   logger.Fatalf("Could not listen on %s: %v\n", listenAddr, err)
+  }
 
-   <-done
-   logger.Println("Server stopped")
+  <-done
+  logger.Println("Server stopped")
  }
 
+	//Grace Full Shutdown
  func gracefullShutdown(server *http.Server, logger *log.Logger, quit <-chan os.Signal, done chan<- bool) {
    <-quit
    logger.Println("Server is shutting down...")
@@ -113,11 +120,15 @@ func main() {
    close(done)
  }
 
+
+	// HTTP web server
  func newWebserver(logger *log.Logger) *http.Server {
-   router := http.NewServeMux()
+   router := http.NewServeMux()\
+
+	 // index.html
    router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-     w.WriteHeader(http.StatusOK)
-		 if requiredapps[2] {
+     w.WriteHeader(http.StatusOK) // return 200
+		 if requiredapps[2] {					// Set gzip variable for javascript
 			 gzip = "true"
 		 } else {
 			 gzip = "false"
@@ -359,11 +370,14 @@ func main() {
 		 </script>
 		 </html>`)
    })
+
+	 // Test function
 	 router.HandleFunc("/disk/", func(w http.ResponseWriter, r *http.Request) {
      w.WriteHeader(http.StatusOK)
 		 fmt.Fprintf(w, "Selected disk %s", r.URL.Path[5:])
    })
 
+	 // Get System Disk informations with linux util lsblk . // JSON
 	 router.HandleFunc("/lsblk.json", func(w http.ResponseWriter, r *http.Request) {
 		 if requiredapps[2] == true {
      w.WriteHeader(http.StatusOK)
@@ -381,12 +395,13 @@ func main() {
 		}
    })
 
+	 // Get SYSTEM IMAGE
 	 router.HandleFunc("/image/", func(w http.ResponseWriter, r *http.Request) {
 			 t := time.Now()
 		 filename := "backup-"+hostname+"-"+t.Format(time.RFC3339)+".img"
 		 w.Header().Set("Content-Disposition", "attachment; filename="+filename)
 
-
+		 // Set HTTP header befare Transfering data.
 		w.Header().Set("Transfer-Encoding", "chunked")
 	 	cmd := exec.Command("dd",fmt.Sprintf("if=%s", r.URL.Path[6:]))
 	 	//cmd := exec.Command("bash", "run.sh")
@@ -398,6 +413,7 @@ func main() {
 	 	pipeWriter.Close()
 	 })
 
+	 // Get SYSTEM IMAGE with gzipped to save bandwith
 	 router.HandleFunc("/image.gz/", func(w http.ResponseWriter, r *http.Request) {
 		if requiredapps[2] == true {
 			// Get time and set headers

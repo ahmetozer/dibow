@@ -1,5 +1,9 @@
 # HTTP Disk Image Backup
-Backup entire disk image over http
+Backup entire disk image over http for Linux systems.
+
+
+## Program Options
+For a now just allow only one option.
 
 ### listen-addr
 
