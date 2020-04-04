@@ -26,8 +26,6 @@ var (
 
 
 // pass CMD output to HTTP
-
-
 func writeCmdOutput(res http.ResponseWriter, pipeReader *io.PipeReader) {
 	buffer := make([]byte, BUF_LEN)
 	for {
@@ -83,7 +81,7 @@ func main() {
 
 	fmt.Println("hostname:", hostname)
 
-	flag.StringVar(&listenAddr, "listen-addr", ":80", "server listen address")
+	flag.StringVar(&listenAddr, "listen-addr", ":443", "server listen address")
   flag.Parse()
 
   logger := log.New(os.Stdout, "http: ", log.LstdFlags)
@@ -93,11 +91,12 @@ func main() {
 
   signal.Notify(quit, os.Interrupt)
 
+	ssl_cert_generate()
   server := newWebserver(logger)
   go gracefullShutdown(server, logger, quit, done)
 
   logger.Println("Server is ready to handle requests at", listenAddr)
-  if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+  if err := server.ListenAndServeTLS("cert.pem", "key.pem"); err != nil && err != http.ErrServerClosed {
    logger.Fatalf("Could not listen on %s: %v\n", listenAddr, err)
   }
 
@@ -119,6 +118,3 @@ func main() {
    }
    close(done)
  }
-
-
-	
