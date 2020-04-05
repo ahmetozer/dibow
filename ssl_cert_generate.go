@@ -27,7 +27,6 @@ import (
 	"time"
 )
 
-
 var (
 	host       = flag.String("host", "", "Comma-separated hostnames and IPs to generate a certificate for")
 	validFrom  = flag.String("start-date", "", "Creation date formatted as Jan 1 15:04:05 2011")
@@ -57,9 +56,9 @@ func ssl_cert_generate() {
 	if len(*host) == 0 {
 		var err error
 		hostname, err = os.Hostname()
-			if err != nil {
-				panic(err)
-			}
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	var priv interface{}

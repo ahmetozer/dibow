@@ -1,19 +1,20 @@
 package main
+
 // index.html
 
 import (
-	"net/http"
 	"fmt"
+	"net/http"
 )
 
 func index(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK) // return 200
-	if requiredapps[2] {					// Set gzip variable for javascript
+	if requiredapps[2] {         // Set gzip variable for javascript
 		gzip = "true"
 	} else {
 		gzip = "false"
 	}
-	fmt.Fprintf(w,`<!DOCTYPE html>
+	fmt.Fprintf(w, `<!DOCTYPE html>
 	<html>
 	<head>
 	 <meta name="viewport" content="width=device-width, initial-scale=1.0">
