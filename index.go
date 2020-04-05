@@ -18,7 +18,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 	<head>
 	 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-	<title>HTTP Disk Image Backup</title>
+	<title>Dibow</title>
 	<style>
 	 th, td, p, body {
 		 font-family: Arial, Helvetica, sans-serif;
@@ -172,7 +172,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 	</head>
 	<body>
 	<div class="header">
-		<h1>HTTP Disk Image Backup</h1>
+		<h1>Dibow</h1>
 		<h2>Server `+hostname+`</h2>
 		<button onclick="load_disk()">Reload Disks</button>
 	</div>
