@@ -4,23 +4,15 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"flag"
 	"fmt"
 	"io"
 	"log"
-	"math/big"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
-	"strings"
 	"time"
 )
 
@@ -55,120 +47,7 @@ func publicKey(priv interface{}) interface{} {
 	}
 }
 
-func ssl_cert_generate() {
-	flag.Parse()
 
-	if len(*host) == 0 {
-		var err error
-		hostname, err = os.Hostname()
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	var priv interface{}
-	var err error
-	switch *ecdsaCurve {
-	case "":
-		if *ed25519Key {
-			_, priv, err = ed25519.GenerateKey(rand.Reader)
-		} else {
-			priv, err = rsa.GenerateKey(rand.Reader, *rsaBits)
-		}
-	case "P224":
-		priv, err = ecdsa.GenerateKey(elliptic.P224(), rand.Reader)
-	case "P256":
-		priv, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	case "P384":
-		priv, err = ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	case "P521":
-		priv, err = ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
-	default:
-		log.Fatalf("Unrecognized elliptic curve: %q", *ecdsaCurve)
-	}
-	if err != nil {
-		log.Fatalf("Failed to generate private key: %v", err)
-	}
-
-	var notBefore time.Time
-	if len(*validFrom) == 0 {
-		notBefore = time.Now()
-	} else {
-		notBefore, err = time.Parse("Jan 2 15:04:05 2006", *validFrom)
-		if err != nil {
-			log.Fatalf("Failed to parse creation date: %v", err)
-		}
-	}
-
-	notAfter := notBefore.Add(*validFor)
-
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		log.Fatalf("Failed to generate serial number: %v", err)
-	}
-
-	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Acme Co"},
-		},
-		NotBefore: notBefore,
-		NotAfter:  notAfter,
-
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	hosts := strings.Split(*host, ",")
-	for _, h := range hosts {
-		if ip := net.ParseIP(h); ip != nil {
-			template.IPAddresses = append(template.IPAddresses, ip)
-		} else {
-			template.DNSNames = append(template.DNSNames, h)
-		}
-	}
-
-	if *isCA {
-		template.IsCA = true
-		template.KeyUsage |= x509.KeyUsageCertSign
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(priv), priv)
-	if err != nil {
-		log.Fatalf("Failed to create certificate: %v", err)
-	}
-
-	certOut, err := os.Create("cert.pem")
-	if err != nil {
-		log.Fatalf("Failed to open cert.pem for writing: %v", err)
-	}
-	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		log.Fatalf("Failed to write data to cert.pem: %v", err)
-	}
-	if err := certOut.Close(); err != nil {
-		log.Fatalf("Error closing cert.pem: %v", err)
-	}
-	log.Print("wrote cert.pem\n")
-
-	keyOut, err := os.OpenFile("key.pem", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		log.Fatalf("Failed to open key.pem for writing: %v", err)
-		return
-	}
-	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
-	if err != nil {
-		log.Fatalf("Unable to marshal private key: %v", err)
-	}
-	if err := pem.Encode(keyOut, &pem.Block{Type: "PRIVATE KEY", Bytes: privBytes}); err != nil {
-		log.Fatalf("Failed to write data to key.pem: %v", err)
-	}
-	if err := keyOut.Close(); err != nil {
-		log.Fatalf("Error closing key.pem: %v", err)
-	}
-	log.Print("wrote key.pem\n")
-}
 
 // pass CMD output to HTTP
 func writeCmdOutput(res http.ResponseWriter, pipeReader *io.PipeReader) {
@@ -192,73 +71,74 @@ func writeCmdOutput(res http.ResponseWriter, pipeReader *io.PipeReader) {
 	}
 }
 
-func Server() {
-
-	// Requred programs for the backup system on Linux enviroment
-
+//	Server
+func Server(args []string) {
+	// Checking required applications.
 	required_programs := []string{"sh", "df", "gzip", "lsblk"}
-
 	for i, s := range required_programs {
 		// Get path of required programs
 		path, err := exec.LookPath(s)
 		if err == nil {
 			fmt.Printf("Required program %v %v found at %v\n", i+1, s, path)
 			requiredapps[i] = true //save to array
-		} else {
-			fmt.Printf("Required program %v %v cannot found.\n", i+1, s)
-			requiredapps[i] = false
-			if i < 2 { //sh and df is must required. If is not found in software than exit.
-				fmt.Printf("Please install %v and run this program again\n", s)
-				os.Exit(3)
+			} else {
+				fmt.Printf("Required program %v %v cannot found.\n", i+1, s)
+				requiredapps[i] = false
+				if i < 2 { //sh and df is must required. If is not found in software than exit.
+					fmt.Printf("Please install %v and run this program again\n", s)
+					os.Exit(3)
+				}
 			}
 		}
 
+
+		flag := flag.NewFlagSet("Server", flag.ContinueOnError)
+
+		//	Get Hostname of Server
+		var err error
+		hostname, err = os.Hostname()
+		if err != nil {
+			panic(err)
+		}
+
+		//	Print hostname
+		fmt.Println("hostname:", hostname)
+		flag.StringVar(&listenAddr, "listen-addr", ":443", "server listen address")
+		flag.Parse(args)
+		//	Parse arguments
+
+		//	Log to file
+		logger := log.New(os.Stdout, "https: ", log.LstdFlags)
+		done := make(chan bool, 1)
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, os.Interrupt)
+
+		//	Generate SSL Certificate For the webserver
+		ssl_cert_generate()
+
+		//	Start the web server.
+		server := newWebserver(logger)
+		go gracefullShutdown(server, logger, quit, done)
+		logger.Println("Server is ready to handle requests at", listenAddr)
+		if err := server.ListenAndServeTLS("cert.pem", "key.pem"); err != nil && err != http.ErrServerClosed {
+			logger.Fatalf("Could not listen on %s: %v\n", listenAddr, err)
+		}
+		<-done
+		logger.Println("Server stopped")
+
 	}
 
-	//	Get Hostname of Server
-	var err error
-	hostname, err = os.Hostname()
-	if err != nil {
-		panic(err)
+	//Grace Full Shutdown
+	func gracefullShutdown(server *http.Server, logger *log.Logger, quit <-chan os.Signal, done chan<- bool) {
+		<-quit
+		logger.Println("Server is shutting down...")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		server.SetKeepAlivesEnabled(false)
+		if err := server.Shutdown(ctx); err != nil {
+			logger.Fatalf("Could not gracefully shutdown the server: %v\n", err)
+		}
+		close(done)
 	}
-
-	fmt.Println("hostname:", hostname)
-
-	flag.StringVar(&listenAddr, "listen-addr", ":443", "server listen address")
-	flag.Parse()
-
-	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
-
-	done := make(chan bool, 1)
-	quit := make(chan os.Signal, 1)
-
-	signal.Notify(quit, os.Interrupt)
-
-	ssl_cert_generate()
-
-	server := newWebserver(logger)
-	go gracefullShutdown(server, logger, quit, done)
-
-	logger.Println("Server is ready to handle requests at", listenAddr)
-	if err := server.ListenAndServeTLS("cert.pem", "key.pem"); err != nil && err != http.ErrServerClosed {
-		logger.Fatalf("Could not listen on %s: %v\n", listenAddr, err)
-	}
-
-	<-done
-	logger.Println("Server stopped")
-}
-
-//Grace Full Shutdown
-func gracefullShutdown(server *http.Server, logger *log.Logger, quit <-chan os.Signal, done chan<- bool) {
-	<-quit
-	logger.Println("Server is shutting down...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	server.SetKeepAlivesEnabled(false)
-	if err := server.Shutdown(ctx); err != nil {
-		logger.Fatalf("Could not gracefully shutdown the server: %v\n", err)
-	}
-	close(done)
-}
