@@ -71,10 +71,14 @@ func writeCmdOutput(res http.ResponseWriter, pipeReader *io.PipeReader) {
 	}
 }
 
+
 //	Server
 func Server(args []string) {
+
+
 	// Checking required applications.
 	required_programs := []string{"sh", "df", "gzip", "lsblk"}
+
 	for i, s := range required_programs {
 		// Get path of required programs
 		path, err := exec.LookPath(s)
@@ -91,10 +95,9 @@ func Server(args []string) {
 			}
 		}
 
-
 		flag := flag.NewFlagSet("Server", flag.ContinueOnError)
 
-		//	Get Hostname of Server
+		//	Get Hostname of the Server
 		var err error
 		hostname, err = os.Hostname()
 		if err != nil {
@@ -106,7 +109,6 @@ func Server(args []string) {
 		flag.StringVar(&listenAddr, "listen-addr", ":443", "server listen address")
 		flag.Parse(args)
 		//	Parse arguments
-
 		//	Log to file
 		logger := log.New(os.Stdout, "https: ", log.LstdFlags)
 		done := make(chan bool, 1)
@@ -116,7 +118,7 @@ func Server(args []string) {
 		//	Generate SSL Certificate For the webserver
 		ssl_cert_generate()
 
-		//	Start the web server.
+		//	Start the web server. // web_server.go
 		server := newWebserver(logger)
 		go gracefullShutdown(server, logger, quit, done)
 		logger.Println("Server is ready to handle requests at", listenAddr)
