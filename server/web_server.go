@@ -6,39 +6,48 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"os"
 	"time"
 	"math/rand"
 	"encoding/base64"
 	"strings"
-
+	//"bytes"
 )
 
 var (
-		password = random_password()
+	//password = random_password()
+	password = "root"
 )
 func random_password() string {
 	rand.Seed(time.Now().UnixNano())
-digits := "0123456789"
-specials := "~=+%^*/()[]{}/!@#$?|"
-all := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-        "abcdefghijklmnopqrstuvwxyz" +
-        digits + specials
-length := 16
-buf := make([]byte, length)
-buf[0] = digits[rand.Intn(len(digits))]
-buf[1] = specials[rand.Intn(len(specials))]
-for i := 2; i < length; i++ {
-        buf[i] = all[rand.Intn(len(all))]
-}
-for i := len(buf) - 1; i > 0; i-- {
-        j := rand.Intn(i + 1)
-        buf[i], buf[j] = buf[j], buf[i]
-}
-str := string(buf)
+	digits := "0123456789"
+	specials := "~=+%^*/()[]{}/!@#$?|"
+	all := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
+	"abcdefghijklmnopqrstuvwxyz" +
+	digits + specials
+	length := 16
+	buf := make([]byte, length)
+	buf[0] = digits[rand.Intn(len(digits))]
+	buf[1] = specials[rand.Intn(len(specials))]
+	for i := 2; i < length; i++ {
+		buf[i] = all[rand.Intn(len(all))]
+	}
+	for i := len(buf) - 1; i > 0; i-- {
+		j := rand.Intn(i + 1)
+		buf[i], buf[j] = buf[j], buf[i]
+	}
+	str := string(buf)
 
-return str
+	return str
 }
 
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
 
 func basicAuth(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +80,15 @@ func basicAuth(h http.HandlerFunc) http.HandlerFunc {
 		h.ServeHTTP(w, r)
 	}
 }
+
+func HttpClientIP(r *http.Request) string {
+	forwarded := r.Header.Get("X-FORWARDED-FOR")
+	if forwarded != "" {
+		return forwarded
+	}
+	return r.RemoteAddr
+}
+
 func use(h http.HandlerFunc, middleware ...func(http.HandlerFunc) http.HandlerFunc) http.HandlerFunc {
 	for _, m := range middleware {
 		h = m(h)
@@ -80,15 +98,21 @@ func use(h http.HandlerFunc, middleware ...func(http.HandlerFunc) http.HandlerFu
 }
 
 
-
+// Web server to handle disk operation requests
 func newWebserver(logger *log.Logger) *http.Server {
 
+	fmt.Println(random_password())
+
+	//Print Root user Password
 	fmt.Printf("Random password: %s\n", password)
+
+	// Crearte New HTTP Router
 	router := http.NewServeMux()
 
+	// Index Handler
 	router.HandleFunc("/", index)
 
-	// Test function
+	// Disk Test function
 	router.HandleFunc("/disk/", use(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "Selected disk %s", r.URL.Path[5:])
@@ -96,89 +120,102 @@ func newWebserver(logger *log.Logger) *http.Server {
 
 	// Get System Disk informations with linux util lsblk . // JSON
 	router.HandleFunc("/lsblk.json", use(func(w http.ResponseWriter, r *http.Request) {
-		if requiredapps[2] == true {
-			w.WriteHeader(http.StatusOK)
-			cmd := exec.Command("lsblk", "-J")
-			//cmd := exec.Command("bash", "run.sh")
-			pipeReader, pipeWriter := io.Pipe()
-			cmd.Stdout = pipeWriter
-			cmd.Stderr = pipeWriter
-			go writeCmdOutput(w, pipeReader)
-			cmd.Run()
-			pipeWriter.Close()
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w, "lsblk not installed")
-		}
+
+			//	Check lsblk application
+			if requiredapps[3] == true {
+				// return success
+				w.WriteHeader(http.StatusOK)
+				cmd := exec.Command("lsblk", "-J")
+				// Organize pipelines
+				pipeIn, pipeWriter := io.Pipe()
+				cmd.Stdout = pipeWriter
+				cmd.Stderr = pipeWriter
+				// Pass to web output
+				go writeCmdOutput(w, pipeIn)
+
+				// Run commands
+				cmd.Run()
+				pipeWriter.Close()
+
+				} else {
+					w.WriteHeader(http.StatusNotFound)
+					fmt.Fprintf(w, "lsblk not installed")
+				}
 	}, basicAuth))
 
 	// Get SYSTEM IMAGE
 	router.HandleFunc("/image/", use(func(w http.ResponseWriter, r *http.Request) {
+	// Check device path.
+	// This also prevent if any vulnerable is avaible at url
+	if fileExists(r.URL.Path[6:]) {
 		t := time.Now()
 		filename := "backup-" + hostname + "-" + t.Format(time.RFC3339) + ".img"
 		w.Header().Set("Content-Disposition", "attachment; filename="+filename)
-
 		// Set HTTP header befare Transfering data.
 		w.Header().Set("Transfer-Encoding", "chunked")
-		cmd := exec.Command("dd", fmt.Sprintf("if=%s", r.URL.Path[6:]))
-		//cmd := exec.Command("bash", "run.sh")
-		pipeReader, pipeWriter := io.Pipe()
-		cmd.Stdout = pipeWriter
-		cmd.Stderr = pipeWriter
-		go writeCmdOutput(w, pipeReader)
-		cmd.Run()
+
+		ddCommand := exec.Command("dd", fmt.Sprintf("if=%s", r.URL.Path[6:]))
+		pipeIn, pipeWriter := io.Pipe()
+		ddCommand.Stdout = pipeWriter
+		ddCommand.Stderr = pipeWriter
+
+		go writeCmdOutput(w, pipeIn)
+
+		ddCommand.Run()
 		pipeWriter.Close()
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Printf("Disk %s is does not exist. This query requests by %s\n", r.URL.Path[6:], HttpClientIP(r) )
+	}
 	}, basicAuth))
 
 	// Get SYSTEM IMAGE with gzipped to save bandwith
 	router.HandleFunc("/image.gz/", use(func(w http.ResponseWriter, r *http.Request) {
-		if requiredapps[2] == true {
-			// Get time and set headers
-			t := time.Now()
-			filename := "backup-" + hostname + "-" + t.Format(time.RFC3339) + ".img.gz"
-			w.Header().Set("Content-Disposition", "attachment; filename="+filename)
-			w.Header().Set("Transfer-Encoding", "chunked")
 
-			// run Command
-			cmd := exec.Command("dd", fmt.Sprintf("if=%s", r.URL.Path[9:]))
-			//c2 := exec.Command("gzip ", "-1", "-")
-			//cmd := exec.Command("bash", "run.sh")
-			//pipeReader, pipeWriter := io.Pipe()
-			pipeReader1, pipeWriter1 := io.Pipe()
-			cmd.Stdout = pipeWriter1
-			cmd.Stderr = pipeWriter1
+		if requiredapps[2] == true { // Check gzip on system
 
-			c2 := exec.Command("gzip ", "-1", "-")
-			//cmd := exec.Command("bash", "run.sh")
+			if fileExists(r.URL.Path[9:]) { // Check device path. // This also prevent if any vulnerable is avaible at
+				// Get time and set headers
+				t := time.Now()
+				filename := "backup-" + hostname + "-" + t.Format(time.RFC3339) + ".img.gz"
+				w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+				w.Header().Set("Transfer-Encoding", "chunked")
 
-			pipeReader2, pipeWriter2 := io.Pipe()
+				pipeIn, pipeWriter := io.Pipe()
 
-			c2.Stdin = pipeReader1
-			c2.Stdout = pipeWriter2
-			c2.Stderr = pipeWriter2
+				ddCommand := exec.Command("dd", fmt.Sprintf("if=%s", r.URL.Path[9:]))
+				gzipCommand := exec.Command("gzip ", "-1", "-")
 
-			go writeCmdOutput(w, pipeReader2)
-			//cmd.Run()
-			cmd.Start()
-			c2.Start()
-			cmd.Wait()
-			c2.Wait()
-			pipeWriter1.Close()
-			pipeWriter2.Close()
+
+				gzipCommand.Stdin, _ = ddCommand.StdoutPipe()
+
+				gzipCommand.Stdout = pipeWriter
+				go writeCmdOutput(w, pipeIn)
+
+				_ = gzipCommand.Start()
+				_ = ddCommand.Run()
+				_ = gzipCommand.Wait()
+				pipeWriter.Close()
+
+
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Printf("Disk %s is does not exist. This query requests by %s\n", r.URL.Path[9:], HttpClientIP(r) )
+			}
 
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "gzip cannot found\n")
 		}
 
-	}, basicAuth))
+		}, basicAuth))
 
-	return &http.Server{
-		Addr:     listenAddr,
-		Handler:  router,
-		ErrorLog: logger,
-		//ReadTimeout:  5 * time.Second,
-		//WriteTimeout: 10 * time.Second,
-		//IdleTimeout:  15 * time.Second,
-	}
+		return &http.Server{
+			Addr:     listenAddr,
+			Handler:  router,
+			ErrorLog: logger,
+			//ReadTimeout:  5 * time.Second,
+			//WriteTimeout: 10 * time.Second,
+			//IdleTimeout:  15 * time.Second,
+		}
 }

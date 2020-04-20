@@ -4,5 +4,5 @@ import (
 )
 
 func Client(args []string) {
-fmt.Printf("Client example\n")
+fmt.Printf("Sorry, This function is currently unavaible\n")
 }
