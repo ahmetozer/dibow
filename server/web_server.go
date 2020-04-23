@@ -15,8 +15,7 @@ import (
 )
 
 var (
-	//password = random_password()
-	password = "root"
+	password = random_password()
 )
 func random_password() string {
 	rand.Seed(time.Now().UnixNano())
@@ -96,12 +95,11 @@ func use(h http.HandlerFunc, middleware ...func(http.HandlerFunc) http.HandlerFu
 
 	return h
 }
+// pass CMD output to HTTP
 
 
 // Web server to handle disk operation requests
 func newWebserver(logger *log.Logger) *http.Server {
-
-	fmt.Println(random_password())
 
 	//Print Root user Password
 	fmt.Printf("Random password: %s\n", password)
@@ -175,27 +173,22 @@ func newWebserver(logger *log.Logger) *http.Server {
 		if requiredapps[2] == true { // Check gzip on system
 
 			if fileExists(r.URL.Path[9:]) { // Check device path. // This also prevent if any vulnerable is avaible at
-				// Get time and set headers
 				t := time.Now()
 				filename := "backup-" + hostname + "-" + t.Format(time.RFC3339) + ".img.gz"
 				w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+				// Set HTTP header befare Transfering data.
 				w.Header().Set("Transfer-Encoding", "chunked")
 
+				ddCommand := exec.Command("sh", "-c", "dd "+fmt.Sprintf("if=%s", r.URL.Path[9:])+" | gzip -")
 				pipeIn, pipeWriter := io.Pipe()
+				ddCommand.Stdout = pipeWriter
+				ddCommand.Stderr = pipeWriter
 
-				ddCommand := exec.Command("dd", fmt.Sprintf("if=%s", r.URL.Path[9:]))
-				gzipCommand := exec.Command("gzip ", "-1", "-")
-
-
-				gzipCommand.Stdin, _ = ddCommand.StdoutPipe()
-
-				gzipCommand.Stdout = pipeWriter
 				go writeCmdOutput(w, pipeIn)
 
-				_ = gzipCommand.Start()
-				_ = ddCommand.Run()
-				_ = gzipCommand.Wait()
+				ddCommand.Run()
 				pipeWriter.Close()
+
 
 
 			} else {
