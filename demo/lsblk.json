@@ -1,0 +1,10 @@
+{
+   "blockdevices": [
+      {"name":"vda", "maj:min":"253:0", "rm":false, "size":"18.6G", "ro":false, "type":"disk", "mountpoint":null,
+         "children": [
+            {"name":"vda1", "maj:min":"253:1", "rm":false, "size":"18.5G", "ro":false, "type":"part", "mountpoint":"/go/src/github.com/AhmetOZER/dibow"},
+            {"name":"vda15", "maj:min":"253:15", "rm":false, "size":"100M", "ro":false, "type":"part", "mountpoint":null}
+         ]
+      }
+   ]
+}
