@@ -25,11 +25,23 @@ cd dibow
 go build
 ```
 
+### Get from gitlab
+
+You can get binary from gitlab.
+```bash
+wget "https://gitlab.com/ahmetozer/dibow/-/jobs/artifacts/master/download?job=compile" -O dibow.zip
+unzip dibow.zip
+chmod +x dibow
+```
+
 ## Program Modes
 
 ### Server
 This option is serve your disk into web service.
 You can list and download your disk images on web.
+
+Default username is `root` .  
+A random password will be displayed on the terminal.
 
 #### Arguments
 - `--listen-addr` Program normally starts with port 443 but if you want to use a different you can use a --listen-addr argument to set different port or address.

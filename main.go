@@ -42,10 +42,9 @@ func main() {
 
 }
 var help = `
-Usage: dibow [command] [--help]
+Usage: dibow [command]
 Commands:
 server - runs dibow in server mode
-client - runs dibow in client mode
 
 Read more:
 https://github.com/AhmetOZER/dibow
