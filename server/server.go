@@ -47,10 +47,15 @@ func publicKey(priv interface{}) interface{} {
 	}
 }
 
-
+func recoverFromAnywhere(Where string) {
+	if r := recover(); r != nil {
+		fmt.Println("Recovered from ", Where, r)
+	}
+}
 
 // pass CMD output to HTTP
 func writeCmdOutput(res http.ResponseWriter, pipeReader *io.PipeReader) {
+	defer recoverFromAnywhere("Http Flush Panic")
 	buffer := make([]byte, BUF_LEN)
 	for {
 		n, err := pipeReader.Read(buffer)
